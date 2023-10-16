@@ -2,8 +2,14 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
-def perform_segmentation(hair_removed_image):
-    hair_removed_gray = cv2.cvtColor(hair_removed_image, cv2.COLOR_RGB2GRAY)
+def perform_segmentation(original_image):
+    # Ensure the input image is a 3-channel color image
+    if len(original_image.shape) == 2 or original_image.shape[2] == 1:
+        original_image_rgb = cv2.cvtColor(original_image, cv2.COLOR_GRAY2RGB)
+    else:
+        original_image_rgb = original_image
+
+    hair_removed_gray = cv2.cvtColor(original_image_rgb, cv2.COLOR_RGB2GRAY)
     blurred = cv2.GaussianBlur(hair_removed_gray, (5, 5), 0)
     _, thresholded_image = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 

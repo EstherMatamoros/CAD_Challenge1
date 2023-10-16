@@ -1,88 +1,106 @@
 import os
 import cv2
-from preprocessing.preprocessing import contrast_stretching, remove_hair
-from segmentation.segmentation import perform_segmentation
-from data_loader.data_loading import load_images_from_folder
-from tqdm import tqdm  # Add this line for progress bar
 import numpy as np
-from matplotlib import pyplot as plt
+from tqdm import tqdm
+import pickle
+from classification.classificationML import train_random_forest_classifier
+from features.feature_extraction import extract_features_from_segmented_regions
+from data_loader.data_loading import load_images_from_folder
+from segmentation.segmentation import perform_segmentation
+from preprocessing.preprocessing import *
 
-def main():
-    train_folder = 'C:/Users/Administrador/Documents/0. MAIA/3. Spain/1.CAD/1.Project_SEP/Skinbinary_train/nevus/'
-    output_folder = 'C:/Users/Administrador/Documents/processed_images/'  # Specify your output folder
-    os.makedirs(output_folder, exist_ok=True)  # Create the output folder if it doesn't exist
+class SkinImageClassifier:
+    def __init__(self, nevus_dir, others_dir):
+        self.nevus_dir = nevus_dir
+        self.others_dir = others_dir
+        self.output_folder = 'CAD_Challenge1/masks'
+        os.makedirs(self.output_folder, exist_ok=True)
 
-    images = load_images_from_folder(train_folder)
-
-    for img, filename in tqdm(images, desc="Processing images", unit="image"):
-        # Convert to grayscale
-        image_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        # Check if the grayscale image is empty
-        if image_gray.size == 0:
-            print("Error: Grayscale image is empty.")
-            continue
-
-        # Resize the image to 600x600
-        image_resized = cv2.resize(image_gray, (600, 600))
-
-        # Noise removal with a 3x3 median filter
-        image_noise_removed = cv2.medianBlur(image_resized, 3)
-
-        # Contrast stretching on the grayscale image
-        image_contrast_stretched = contrast_stretching(image_noise_removed)
-
-        # Hair removal using bottom-hat filtering
-        hair_removed_image = remove_hair(image_contrast_stretched)
-
-        # Convert enhanced image to gray only if it's not already grayscale
-        if len(image_resized.shape) == 3:  # Check if the image has 3 color channels (not grayscale)
-            enhanced_gray_image = cv2.cvtColor(image_resized, cv2.COLOR_BGR2GRAY)
+    def preprocess_image(self, image):
+          # Convert grayscale image to 3-channel color image if needed
+        if len(image.shape) == 2 or image.shape[2] == 1:
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
         else:
-            enhanced_gray_image = image_resized  # If it's already grayscale, no need to convert
+            image_rgb = image
+                
+        resized_image = cv2.resize(image_rgb, (700, 700))
 
-        '''# Print image type information
-        if len(enhanced_gray_image.shape) == 2:
-            print("Enhanced Gray Image is Grayscale")
-        elif len(enhanced_gray_image.shape) == 3 and enhanced_gray_image.shape[2] == 3:
-            print("Enhanced Gray Image is RGB")
-        elif len(enhanced_gray_image.shape) == 3 and enhanced_gray_image.shape[2] == 1:
-            print("Enhanced Gray Image is Binary")'''
+        # Apply contrast stretching
+        contrast_stretched_image = contrast_stretching(resized_image)
 
-        '''# Print statistics for Enhanced Gray Image
-        print_image_statistics(enhanced_gray_image, 'Enhanced Gray')
+        # Apply hair removal
+        hair_removed_image = remove_hair(contrast_stretched_image)
 
-        # Print statistics for Hair-Removed Image
-        print_image_statistics(hair_removed_image, 'Hair-Removed')'''
+        return hair_removed_image  # Return the preprocessed image
 
-        '''# Plotting the segmentation results
-        plt.figure(figsize=(15, 6))
+    def extract_features(self, image):
+        # Your feature extraction code here
+        feature_vector = extract_features_from_segmented_regions(image)  # Call the imported function
+        # Additional feature extraction steps if needed
+        return feature_vector
 
-        # Enhanced gray image
-        plt.subplot(1, 3, 1)
-        plt.imshow(enhanced_gray_image, cmap='gray')
-        plt.title('Enhanced Gray Image')
-        plt.axis('off')
+    def process_images(self, class_dir, label):
+        # Check if preprocessed images exist in a Pickle file
+        pickle_file = f'preprocessed_images_{label}.pickle'
+        if os.path.isfile(pickle_file):
+            with open(pickle_file, 'rb') as file:
+                preprocessed_images = pickle.load(file)
+        else:
+            images = load_images_from_folder(class_dir)
+            preprocessed_images = []
 
-        # Hair removal result
-        plt.subplot(1, 3, 2)
-        plt.imshow(hair_removed_image)
-        plt.title('Hair-Removed Image')
-        plt.axis('off')'''
+            for img, filename in tqdm(images, desc=f"Processing {label} images", unit="image"):
+                preprocessed_image = self.preprocess_image(img)
 
-        # Perform segmentation
-        segmented_image = perform_segmentation(hair_removed_image)
+                # Save the preprocessed images as a Pickle file
+                preprocessed_images.append(preprocessed_image)
+            
+            with open(pickle_file, 'wb') as file:
+                pickle.dump(preprocessed_images, file)
 
-        '''plt.subplot(1, 3, 3)
-        plt.imshow(segmented_image, cmap='gray')
-        plt.title('Segmented Image')
-        plt.axis('off')
+        features = []
+        labels = []
 
-        plt.show()'''
+        for preprocessed_image in preprocessed_images:
+            segmented_image = perform_segmentation(preprocessed_image)
+            features.extend(self.extract_features(segmented_image))
+            labels.extend([label] * len(features))
 
-        # Save the processed image
-        output_path = os.path.join(output_folder, filename)
-        cv2.imwrite(output_path, segmented_image)
+            # Save the processed image
+            output_path = os.path.join(self.output_folder, filename)
+            cv2.imwrite(output_path, segmented_image)
+
+        return features, labels
+
+    def train_classifier(self):
+        nevus_features, nevus_labels = self.process_images(self.nevus_dir, label=0)
+        others_features, others_labels = self.process_images(self.others_dir, label=1)
+
+        # Convert lists of features to NumPy arrays
+        nevus_features = np.array(nevus_features)
+        others_features = np.array(others_features)
+
+        # Combine features and labels for both classes
+        features = np.concatenate([nevus_features, others_features])
+        labels = np.concatenate([nevus_labels, others_labels])
+
+        print(f"Total number of features: {len(features)}")
+        print(f"Total number of labels: {len(labels)}")
+        print(f"Features shape: {features.shape}")
+        print(f"Labels shape: {labels.shape}")
+
+        if len(features) == 0:
+            print("Error: No features found.")
+            return
+
+        # Train your classifier on all features and labels
+        rf_accuracy, rf_confusion_matrix = train_random_forest_classifier(features, labels)
+
+        # Print classifier performance metrics
+        print(f"Random Forest Accuracy: {rf_accuracy}")
+        print(f"Random Forest Confusion Matrix:\n{rf_confusion_matrix}")
+
 
 if __name__ == "__main__":
-    main()
+    classifier = SkinImageClassifier(nevus_dir='train/train/nevus', others_dir='train/train/others')
+    classifier.train_classifier()

@@ -20,7 +20,12 @@ def contrast_stretching(image):
     return stretched_image
 
 def remove_hair(image):
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    # Ensure the input image is a 3-channel color image
+    if len(image.shape) == 2 or image.shape[2] == 1:
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    else:
+        image_rgb = image
+
     hsv = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2HSV)
     lower_hair = np.array([0, 20, 70], dtype=np.uint8)
     upper_hair = np.array([20, 255, 255], dtype=np.uint8)
