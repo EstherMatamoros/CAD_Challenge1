@@ -5,6 +5,9 @@ from matplotlib import pyplot as plt
 from segmentation.segmentation import *
 from preprocessing.preprocessing import *
 from skimage.feature import hog
+from skimage.feature import graycomatrix, graycoprops
+from skimage.color import rgb2gray
+from scipy.stats import moment
 
 def load_image_paths_from_folder(folder_path):
     image_files = [os.path.join(folder_path, filename) for filename in os.listdir(folder_path) if filename.endswith(('.jpg', '.png', '.jpeg'))]
@@ -27,44 +30,50 @@ def convert_to_padded_array(features):
     return padded_array
 
 def extract_features_from_segmented_image(segmented_image):
-    features = []
 
-    # Initialize a combined mask with the same dimensions as the first region
-    combined_mask = np.zeros_like(segmented_image[0])
+    segmented_image_gray = cv2.cvtColor(segmented_image, cv2.COLOR_RGB2GRAY)
 
-    for region in segmented_image:
-        # Ensure that the region has the same dimensions as the combined mask
-        if region.shape != combined_mask.shape:
-            region = cv2.resize(region, (combined_mask.shape[1], combined_mask.shape[0]))
+    # Calculate HOG features for the entire segmented image
+    hog_features = hog(segmented_image_gray, pixels_per_cell=(2, 2), cells_per_block=(2, 2))
+    # print(f"Feature vector shape after HOG: {hog_features.shape}")
 
-        # Perform bitwise OR operation to combine the regions
-        combined_mask = cv2.bitwise_or(combined_mask, region)
+    # Calculate GLCM and extract statistics for the entire segmented image
+    glcm = graycomatrix(segmented_image_gray, [1], [0], symmetric=True, normed=True)
+    glcm_contrast = graycoprops(glcm, 'contrast')
+    glcm_contrast = glcm_contrast.ravel()
+    glcm_energy = graycoprops(glcm, 'energy')
+    glcm_energy = glcm_energy.ravel()
+    glcm_homogeneity = graycoprops(glcm, 'homogeneity')
+    glcm_homogeneity = glcm_homogeneity.ravel()
 
-    # Preprocess and extract features from the combined region
-    image_noise_removed = cv2.medianBlur(combined_mask, 3)
-    image_contrast_stretched = contrast_stretching(image_noise_removed)
-    hair_removed_image = remove_hair(image_contrast_stretched)
+    # Extract color features for the entire segmented image
+    color_features = []
 
-    # Convert the hair-removed image to grayscale
-    hair_removed_image_gray = cv2.cvtColor(hair_removed_image, cv2.COLOR_RGB2GRAY)
-    print(f"Feature vector shape: {hair_removed_image_gray.shape}")
+    # Calculate color moments (mean, variance, skewness, kurtosis) for each channel (R, G, B)
+    for channel in range(3):
+        color_mean = np.mean(channel)
+        color_variance = np.var(channel)
 
-    # Check if the image dimensions are too small for HOG
-    if hair_removed_image_gray.shape[0] < 8 or hair_removed_image_gray.shape[1] < 8:
-        # Handle the case of a very small image (e.g., pad or skip)
-        # You can either skip this image:
-        # continue
-        # Or pad the image:
-        print("Skipping small image")
-        if hair_removed_image_gray.shape[0] < 8:
-            hair_removed_image_gray = np.pad(hair_removed_image_gray, ((0, 8 - hair_removed_image_gray.shape[0]), (0, 0)), mode='constant')
-        if hair_removed_image_gray.shape[1] < 8:
-            hair_removed_image_gray = np.pad(hair_removed_image_gray, ((0, 0), (0, 8 - hair_removed_image_gray.shape[1])), mode='constant')
+        # Calculate skewness and kurtosis
+        color_skewness = moment(channel, moment=3)
+        color_kurtosis = moment(channel, moment=4)
 
-    # Apply HOG to the grayscale image
-    feature_vector = hog(hair_removed_image_gray, pixels_per_cell=(2, 2), cells_per_block=(2, 2))
-    print(f"Feature vector shape after HOG: {feature_vector.shape}")
+        # Reshape the variables to have the same shape
+        color_mean = np.array([color_mean])
+        color_variance = np.array([color_variance])
+        color_skewness = np.array([color_skewness])
+        color_kurtosis = np.array([color_kurtosis])
 
-    features.append(feature_vector)
+        # Extend the color_features array
+        color_features.extend([color_mean, color_variance, color_skewness, color_kurtosis])
 
-    return features
+    # Convert the color_features list to a NumPy array
+    color_features = np.array(color_features)
+
+    # Now you can use .ravel() on the NumPy array
+    color_features = color_features.ravel()
+
+    # Combine the features into a single feature vector
+    feature_vector = np.concatenate([hog_features, glcm_contrast, glcm_energy, glcm_homogeneity, color_features])
+
+    return [feature_vector]  # Return a list with one feature vector for the entire image

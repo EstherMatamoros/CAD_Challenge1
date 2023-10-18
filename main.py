@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 import pickle
-from classification.classificationML import train_random_forest_classifier
+from classification.classificationML import train_random_forest_classifier, train_svm_classifier_with_feature_selection
 from features.feature_extraction import extract_features_from_segmented_image , convert_to_padded_array, load_image_paths_from_folder
 from data_loader.data_loading import load_images_from_folder
 from segmentation.segmentation import perform_segmentation
@@ -77,7 +77,7 @@ class SkinImageClassifier:
 
         return features, labels
 
-    def train_classifier(self, subset_size=None):
+    def train_classifier(self, subset_size=None, num_features_to_select=None):
         nevus_features, nevus_labels = self.process_images(self.nevus_dir, label=0, subset_size=subset_size)
         others_features, others_labels = self.process_images(self.others_dir, label=1, subset_size=subset_size)
 
@@ -96,8 +96,7 @@ class SkinImageClassifier:
         if len(features) == 0:
             print("Error: No features found.")
             return
-
-        # Now, the features array is 2D, and you can proceed to train the classifier
+        
         rf_accuracy, rf_confusion_matrix = train_random_forest_classifier(features, labels)
 
         # Print classifier performance metrics
@@ -105,8 +104,18 @@ class SkinImageClassifier:
         print(f"Random Forest Confusion Matrix:\n{rf_confusion_matrix}")
 
 
+        # Now, the features array is 2D, and you can proceed to train the classifier
+        svm_classifier, svm_accuracy, svm_report = train_svm_classifier_with_feature_selection(features, labels, num_features_to_select = 200)
+
+        # Print SVM classifier performance metrics
+        print(f"SVM Accuracy: {svm_accuracy}")
+        print(f"SVM Classification Report:\n{svm_report}")
+
+
+
 
 if __name__ == "__main__":
     classifier = SkinImageClassifier(nevus_dir='train/train/nevus', others_dir='train/train/others')
-    subset_size = 100 
-    classifier.train_classifier(subset_size=subset_size) 
+    subset_size = 1000
+    num_features_to_select = 200  # Choose the number of top features to select
+    classifier.train_classifier(subset_size=subset_size, num_features_to_select=num_features_to_select)
