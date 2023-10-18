@@ -6,14 +6,16 @@ import pickle
 from classification.classificationML import train_random_forest_classifier, train_svm_classifier_with_feature_selection
 from features.feature_extraction import extract_features_from_segmented_image , convert_to_padded_array, load_image_paths_from_folder
 from data_loader.data_loading import load_images_from_folder
-from segmentation.segmentation import perform_segmentation
+from segmentation.segmentation import *
 from preprocessing.preprocessing import *
 import random  
 
 class SkinImageClassifier:
-    def __init__(self, nevus_dir, others_dir):
+    def __init__(self, nevus_dir, others_dir, val_nevus_dir, val_others_dir):
         self.nevus_dir = nevus_dir
         self.others_dir = others_dir
+        self.val_nevus_dir = val_nevus_dir
+        self.val_others_dir = val_others_dir
         self.output_folder = 'CAD_Challenge1/masks'
         os.makedirs(self.output_folder, exist_ok=True)
 
@@ -25,10 +27,15 @@ class SkinImageClassifier:
             image_rgb = image
 
         resized_image = resize_images(image_rgb)
-        # Apply contrast stretching
-        contrast_stretching_image = contrast_stretching(resized_image)
-        # Apply hair removal
-        hair_removed_image = remove_hair(contrast_stretching_image)
+
+        # Convert image to grayscale
+        grayscale_image = cv2.cvtColor(resized_image, cv2.COLOR_BGR2GRAY)
+
+        # Apply contrast stretching to the grayscale image
+        stretched_image = contrast_stretching(grayscale_image)
+        
+        # Remove hair from the stretched grayscale image
+        hair_removed_image = remove_hair(stretched_image)
 
         return hair_removed_image
 
@@ -49,9 +56,7 @@ class SkinImageClassifier:
         return subset_images
 
     def extract_features(self, image):
-        # Your feature extraction code here
         feature_vector = extract_features_from_segmented_image(image) 
-        # Additional feature extraction steps if needed
         return feature_vector
 
     def process_images(self, class_dir, label, subset_size=None):
@@ -66,7 +71,13 @@ class SkinImageClassifier:
 
         for img in tqdm(images, desc=f"Processing {label} images", unit="image"):
             segmented_image = perform_segmentation(img)
-            img_features = self.extract_features(img)  # Extract features for the whole image, not regions
+            # Get the binary mask for ROIs
+            roi_mask = get_roi_mask(segmented_image)
+
+            # Extract ROIs from the original image
+            roi_image = extract_rois(img, roi_mask)
+
+            img_features = self.extract_features(roi_image)  # Extract features for the whole image regions
 
             # Append the features and label for the entire image
             features.append(img_features)
@@ -81,23 +92,32 @@ class SkinImageClassifier:
         nevus_features, nevus_labels = self.process_images(self.nevus_dir, label=0, subset_size=subset_size)
         others_features, others_labels = self.process_images(self.others_dir, label=1, subset_size=subset_size)
 
+        val_nevus_features, val_nevus_labels = self.process_images(self.nevus_dir, label=0, subset_size=subset_size)
+        val_others_features, val_others_labels = self.process_images(self.others_dir, label=1, subset_size=subset_size)
+
         # Combine features and labels for both classes
-        features = nevus_features + others_features
-        labels = nevus_labels + others_labels
+        train_features = nevus_features + others_features
+        train_labels = nevus_labels + others_labels
+
+        val_features = val_nevus_features + val_others_features
+        val_labels = val_nevus_labels + val_others_labels
 
 
         # After combining features and labels, reshape the features array
-        features = np.array(features)  # Convert to NumPy array
-        features = features.reshape(features.shape[0], -1)  # Reshape to 2D
+        train_features = np.array(train_features)  # Convert to NumPy array
+        train_features = train_features.reshape(train_features.shape[0], -1)  # Reshape to 2D
 
-        print(f"Total number of features: {len(features)}")
-        print(f"Total number of labels: {len(labels)}")
+        val_features = np.array(val_features)  # Convert to NumPy array
+        val_features = val_features.reshape(val_features.shape[0], -1)  # Reshape to 2D
 
-        if len(features) == 0:
+        print(f"Total number of train features: {len(train_features)}")
+        print(f"Total number of  train labels: {len(train_labels)}")
+
+        if len(train_features) == 0:
             print("Error: No features found.")
             return
         
-        rf_accuracy, rf_confusion_matrix = train_random_forest_classifier(features, labels)
+        rf_accuracy, rf_confusion_matrix = train_random_forest_classifier(train_features, train_labels, val_features, val_labels)
 
         # Print classifier performance metrics
         print(f"Random Forest Accuracy: {rf_accuracy}")
@@ -105,7 +125,7 @@ class SkinImageClassifier:
 
 
         # Now, the features array is 2D, and you can proceed to train the classifier
-        svm_classifier, svm_accuracy, svm_report = train_svm_classifier_with_feature_selection(features, labels, num_features_to_select = 200)
+        svm_classifier, svm_accuracy, svm_report = train_svm_classifier_with_feature_selection(train_features, train_labels, val_features, val_labels, num_features_to_select)
 
         # Print SVM classifier performance metrics
         print(f"SVM Accuracy: {svm_accuracy}")
@@ -115,7 +135,7 @@ class SkinImageClassifier:
 
 
 if __name__ == "__main__":
-    classifier = SkinImageClassifier(nevus_dir='train/train/nevus', others_dir='train/train/others')
-    subset_size = 1000
-    num_features_to_select = 200  # Choose the number of top features to select
+    classifier = SkinImageClassifier(nevus_dir='train/train/nevus', others_dir='train/train/others',val_nevus_dir='val/val/val/nevus', val_others_dir='val/val/val/others')
+    subset_size = 100
+    num_features_to_select = 500  # Choose the number of top features to select
     classifier.train_classifier(subset_size=subset_size, num_features_to_select=num_features_to_select)
