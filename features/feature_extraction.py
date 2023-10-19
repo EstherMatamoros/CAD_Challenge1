@@ -2,7 +2,7 @@ import cv2
 import os
 import numpy as np
 from matplotlib import pyplot as plt
-from segmentation.segmentation import *
+# from segmentation.segmentation import *
 from preprocessing.preprocessing import *
 from skimage.feature import hog
 from skimage.feature import graycomatrix, graycoprops
@@ -34,8 +34,7 @@ def extract_features_from_segmented_image(segmented_image):
     segmented_image_gray = cv2.cvtColor(segmented_image, cv2.COLOR_RGB2GRAY)
 
     # Calculate HOG features for the entire segmented image
-    hog_features = hog(segmented_image_gray, pixels_per_cell=(2, 2), cells_per_block=(2, 2))
-    # print(f"Feature vector shape after HOG: {hog_features.shape}")
+    hog_features = hog(segmented_image_gray, pixels_per_cell=(8, 8), cells_per_block=(2, 2))
 
     # Calculate GLCM and extract statistics for the entire segmented image
     glcm = graycomatrix(segmented_image_gray, [1], [0], symmetric=True, normed=True)
@@ -51,21 +50,22 @@ def extract_features_from_segmented_image(segmented_image):
 
     # Calculate color moments (mean, variance, skewness, kurtosis) for each channel (R, G, B)
     for channel in range(3):
-        color_mean = np.mean(channel)
-        color_variance = np.var(channel)
+        channel_data = segmented_image[:, :, channel]  # Extract the channel data
+
+        color_mean = np.mean(channel_data)
+        color_variance = np.var(channel_data)
 
         # Calculate skewness and kurtosis
-        color_skewness = moment(channel, moment=3)
-        color_kurtosis = moment(channel, moment=4)
+        color_skewness = moment(channel_data, moment=3)
+        color_kurtosis = moment(channel_data, moment=4)
 
-        # Reshape the variables to have the same shape
-        color_mean = np.array([color_mean])
-        color_variance = np.array([color_variance])
-        color_skewness = np.array([color_skewness])
-        color_kurtosis = np.array([color_kurtosis])
+        # Append the features to the color_features list
+        color_features.append(color_mean)
+        color_features.append(color_variance)
 
-        # Extend the color_features array
-        color_features.extend([color_mean, color_variance, color_skewness, color_kurtosis])
+        # Flatten skewness and kurtosis before appending
+        color_features.extend(color_skewness.ravel())
+        color_features.extend(color_kurtosis.ravel())
 
     # Convert the color_features list to a NumPy array
     color_features = np.array(color_features)

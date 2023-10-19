@@ -2,12 +2,6 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
-'''def print_image_statistics(image, label):
-    print(f"Statistics for {label} Image:")
-    print(f"Minimum Value: {np.min(image)}")
-    print(f"Mean Value: {np.mean(image)}")
-    print(f"Maximum Value: {np.max(image)}")
-    print()'''
 def resize_images(image, new_size=(227, 227), preserve_ratio=False):
     '''Resizing function to handle image sizes from different datasets.
     It can resize to a fixed size or preserve the aspect ratio.
