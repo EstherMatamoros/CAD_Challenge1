@@ -18,13 +18,13 @@ class SkinImageClassifier:
         self.preprocessed_image = None  # Initialize the attribute to None
 
 
-    def load_preprocessed_image(self):
-        if os.path.exists('preprocessed_image.pickle'):
-            with open('preprocessed_image.pickle', 'rb') as file:
-                preprocessed_image = pickle.load(file)
-            self.preprocessed_image = preprocessed_image
-        else:
-            self.preprocessed_image = None
+    # def load_preprocessed_image(self):
+    #     if os.path.exists('preprocessed_image.pickle'):
+    #         with open('preprocessed_image.pickle', 'rb') as file:
+    #             preprocessed_image = pickle.load(file)
+    #         self.preprocessed_image = preprocessed_image
+    #     else:
+    #         self.preprocessed_image = None
 
     def preprocess_image(self, image):
         if self.preprocessed_image is not None:
@@ -34,12 +34,12 @@ class SkinImageClassifier:
         # Remove hair from the stretched grayscale image
         hair_removed_image = remove_hair(resized_image)
 
-        # Save the preprocessed image to a pickle file
-        with open('preprocessed_image.pickle', 'wb') as file:
-            pickle.dump(hair_removed_image, file)
+        # # Save the preprocessed image to a pickle file
+        # with open('preprocessed_image.pickle', 'wb') as file:
+        #     pickle.dump(hair_removed_image, file)
 
-        # Set self.preprocessed_image to the processed image
-        self.preprocessed_image = hair_removed_image
+        # # Set self.preprocessed_image to the processed image
+        # self.preprocessed_image = hair_removed_image
 
         return hair_removed_image
 
@@ -64,21 +64,33 @@ class SkinImageClassifier:
         return feature_vector
 
     def process_images(self, class_dir, label, subset_size=None):
-        if subset_size is not None:
-            images = self.load_random_subset(class_dir, subset_size)
+        # Define the pickle file path based on the label
+        pickle_file = f"{label}_{class_dir}_features.pkl"
+
+        if os.path.exists(pickle_file):
+            # If the pickle file exists, load features and labels from it
+            with open(pickle_file, 'rb') as file:
+                features, labels = pickle.load(file)
         else:
-            image_files = load_image_paths_from_folder(class_dir)
-            images = [self.preprocess_image(cv2.imread(img_path)) for img_path in image_files]
+            if subset_size is not None:
+                images = self.load_random_subset(class_dir, subset_size)
+            else:
+                image_files = load_image_paths_from_folder(class_dir)
+                images = [self.preprocess_image(cv2.imread(img_path)) for img_path in image_files]
 
-        features = []
-        labels = []
+            features = []
+            labels = []
 
-        for img in tqdm(images, desc=f"Processing {label} images", unit="image"):
-            img_features = self.extract_features(img)  # Extract features for the whole image, not regions
+            for img in tqdm(images, desc=f"Processing {label} images", unit="image"):
+                img_features = self.extract_features(img)  # Extract features for the whole image, not regions
 
-            # Append the features and label for the entire image
-            features.append(img_features)
-            labels.append(label)
+                # Append the features and label for the entire image
+                features.append(img_features)
+                labels.append(label)
+
+            # Save features and labels to a pickle file
+            with open(pickle_file, 'wb') as file:
+                pickle.dump((features, labels), file)
 
         return features, labels
     
@@ -110,7 +122,7 @@ class SkinImageClassifier:
             print("Error: No features found.")
             return
         
-        rf_accuracy, rf_confusion_matrix = train_random_forest_classifier(train_features, train_labels, val_features, val_labels)
+        rf_accuracy, rf_confusion_matrix = train_random_forest_classifier(train_features, train_labels, val_features, val_labels, num_features_to_select)
 
         # Print classifier performance metrics
         print(f"Random Forest Accuracy: {rf_accuracy}")
@@ -139,5 +151,5 @@ class SkinImageClassifier:
 if __name__ == "__main__":
     classifier = SkinImageClassifier(nevus_dir='train/train/nevus', others_dir='train/train/others',val_nevus_dir='val/val/val/nevus', val_others_dir='val/val/val/others')
     subset_size = None
-    num_features_to_select = 200  # Choose the number of top features to select
+    num_features_to_select = 1000  # Choose the number of top features to select
     classifier.train_classifier(subset_size=subset_size, num_features_to_select=num_features_to_select)

@@ -13,42 +13,6 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis 
 from sklearn.model_selection import cross_val_score
 
-
-def train_random_forest_classifier(x_train, y_train, x_val, y_val):
-    # Define the parameter grid to search
-    param_grid = {
-        'n_estimators': [50, 100, 200],
-        'max_depth': [None, 10, 20, 30],
-        'min_samples_split': [2, 5, 10],
-        'min_samples_leaf': [1, 2, 4],
-    }
-
-    rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
-
-    # Create a grid search object
-    grid_search = GridSearchCV(estimator=rf_classifier, param_grid=param_grid, cv=5, scoring='accuracy', n_jobs=-1)
-
-    # Perform the grid search on the training data
-    grid_search.fit(x_train, y_train)
-
-    # Get the best parameters found by the grid search
-    best_params = grid_search.best_params_
-
-    # Create a Random Forest classifier with the best parameters
-    best_rf_classifier = RandomForestClassifier(random_state=42, **best_params)
-
-    # Train the best classifier on the training data
-    best_rf_classifier.fit(x_train, y_train)
-    
-    # Make predictions on the validation data
-    rf_preds = best_rf_classifier.predict(x_val)
-
-    # Calculate accuracy and confusion matrix
-    rf_accuracy = accuracy_score(y_val, rf_preds)
-    rf_confusion_matrix = confusion_matrix(y_val, rf_preds)
-
-    return rf_accuracy, rf_confusion_matrix
-
 def feature_selection_with_random_forest(x_train, y_train, num_features_to_select):
     # Train a Random Forest classifier to rank feature importance
     rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
@@ -64,6 +28,48 @@ def feature_selection_with_random_forest(x_train, y_train, num_features_to_selec
     selected_feature_indices = sorted_feature_indices[:num_features_to_select]
 
     return selected_feature_indices  # Return the indices of selected features
+
+def train_random_forest_classifier(x_train, y_train, x_val, y_val, num_features_to_select):
+    
+    selected_feature_indices = feature_selection_with_random_forest(x_train, y_train, num_features_to_select)
+    
+    # Slice the feature matrix to get selected features
+    train_selected_features = x_train[:, selected_feature_indices]
+    val_selected_features = x_val[:, selected_feature_indices]
+    
+    # Define the parameter grid to search
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'max_depth': [None, 10, 20, 30],
+        'min_samples_split': [2, 5, 10],
+        'min_samples_leaf': [1, 2, 4],
+    }
+
+    rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
+
+    # Create a grid search object
+    grid_search = GridSearchCV(estimator=rf_classifier, param_grid=param_grid, cv=5, scoring='accuracy', n_jobs=-1)
+
+    # Perform the grid search on the training data
+    grid_search.fit(train_selected_features, y_train)
+
+    # Get the best parameters found by the grid search
+    best_params = grid_search.best_params_
+
+    # Create a Random Forest classifier with the best parameters
+    best_rf_classifier = RandomForestClassifier(random_state=42, **best_params)
+
+    # Train the best classifier on the training data
+    best_rf_classifier.fit(train_selected_features, y_train)
+    
+    # Make predictions on the validation data
+    rf_preds = best_rf_classifier.predict(val_selected_features)
+
+    # Calculate accuracy and confusion matrix
+    rf_accuracy = accuracy_score(y_val, rf_preds)
+    rf_confusion_matrix = confusion_matrix(y_val, rf_preds)
+
+    return rf_accuracy, rf_confusion_matrix
 
 def train_svm_classifier_with_feature_selection(x_train, y_train, x_val, y_val, num_features_to_select, num_folds=5):
     # Select the top 'num_features_to_select' features
