@@ -15,35 +15,31 @@ class SkinImageClassifier:
         self.others_dir = others_dir
         self.val_nevus_dir = val_nevus_dir
         self.val_others_dir = val_others_dir
+        self.preprocessed_image = None  # Initialize the attribute to None
+
 
     def load_preprocessed_image(self):
         if os.path.exists('preprocessed_image.pickle'):
             with open('preprocessed_image.pickle', 'rb') as file:
                 preprocessed_image = pickle.load(file)
-            return preprocessed_image
+            self.preprocessed_image = preprocessed_image
         else:
-            return None
-
+            self.preprocessed_image = None
 
     def preprocess_image(self, image):
-
         if self.preprocessed_image is not None:
             return self.preprocessed_image
-    
-        # Convert grayscale image to 3-channel color image if needed
-        if len(image.shape) == 2 or image.shape[2] == 1:
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
-        else:
-            image_rgb = image
 
-        resized_image = resize_images(image_rgb)
-        
+        resized_image = resize_images(image)
         # Remove hair from the stretched grayscale image
         hair_removed_image = remove_hair(resized_image)
 
         # Save the preprocessed image to a pickle file
         with open('preprocessed_image.pickle', 'wb') as file:
             pickle.dump(hair_removed_image, file)
+
+        # Set self.preprocessed_image to the processed image
+        self.preprocessed_image = hair_removed_image
 
         return hair_removed_image
 
