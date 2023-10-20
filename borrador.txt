@@ -1,0 +1,47 @@
+#Loading files
+path_train_nevus = '...'
+path_train_other = '...'
+path_val = '...'
+
+#File counter
+train_count_nevus = ''
+train_count_other = ''
+val_count_nevus = ''
+val_count_other = ''
+
+#Summarize the sizes of the pictures for train and validation folder
+sizes_train = []
+sizes_val = []
+
+#1_PREPROCESSING
+#1.1_Image resizing (600x450)
+#1.2_Noise removal
+
+#2_IMAGE ENHACEMENT
+#2.1_Mean
+#2.2_Standard deviation
+
+#3_IMAGE SEGMENTATION
+#3.1_RGB to gray
+#3.2_OTSU's thresholding
+#3.3_Hair removal
+#3.4_Morphological operations
+
+#4_FEATURE EXTRACTION 
+#4.1_GLCM features
+#4.2_HoG features
+#4.3_Color features
+
+#5_FEATURE NORMALIZATION
+
+#6_FEATURE REDUCTION
+
+#7_FEATURE SCALING
+
+#8_SMOTE SAMPLING 
+
+#9_BINARY CLASSIFICATION
+
+#10_PERFORMANCE
+#10.1_IoU
+#10.2_Confussion matrix
