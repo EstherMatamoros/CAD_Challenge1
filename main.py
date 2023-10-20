@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 import pickle
-from classification.classificationML import train_random_forest_classifier, train_svm_classifier_with_feature_selection
+from classification.classificationML import train_random_forest_classifier, train_svm_classifier_with_feature_selection, train_qda_classifier
 from features.feature_extraction import extract_features_from_segmented_image , convert_to_padded_array, load_image_paths_from_folder
 from data_loader.data_loading import load_images_from_folder
 from preprocessing.preprocessing import *
@@ -79,8 +79,8 @@ class SkinImageClassifier:
         nevus_features, nevus_labels = self.process_images(self.nevus_dir, label=0, subset_size=subset_size)
         others_features, others_labels = self.process_images(self.others_dir, label=1, subset_size=subset_size)
 
-        val_nevus_features, val_nevus_labels = self.process_images(self.nevus_dir, label=0, subset_size=subset_size)
-        val_others_features, val_others_labels = self.process_images(self.others_dir, label=1, subset_size=subset_size)
+        val_nevus_features, val_nevus_labels = self.process_images(self.val_nevus_dir, label=0, subset_size=subset_size)
+        val_others_features, val_others_labels = self.process_images(self.val_others_dir, label=1, subset_size=subset_size)
 
         # Combine features and labels for both classes
         train_features = nevus_features + others_features
@@ -112,17 +112,26 @@ class SkinImageClassifier:
 
 
         # Now, the features array is 2D, and you can proceed to train the classifier
-        svm_classifier, svm_accuracy, svm_report = train_svm_classifier_with_feature_selection(train_features, train_labels, val_features, val_labels, num_features_to_select)
+        svm_scores, svm_accuracy, svm_report = train_svm_classifier_with_feature_selection(train_features, train_labels, val_features, val_labels, num_features_to_select)
 
         # Print SVM classifier performance metrics
         print(f"SVM Accuracy: {svm_accuracy}")
+        print(f"SVM mean CV scores:\n{svm_scores}")
         print(f"SVM Classification Report:\n{svm_report}")
+
+        # Now, the features array is 2D, and you can proceed to train the classifier
+        qda_scores, qda_accuracy, qda_report = train_qda_classifier(train_features, train_labels, val_features, val_labels, num_features_to_select)
+
+        # Print SVM classifier performance metrics
+        print(f"QDA Accuracy: {qda_accuracy}")
+        print(f"QDA mean CV scores:\n{qda_scores}")
+        print(f"QDA Classification Report:\n{qda_report}")
 
 
 
 
 if __name__ == "__main__":
     classifier = SkinImageClassifier(nevus_dir='train/train/nevus', others_dir='train/train/others',val_nevus_dir='val/val/val/nevus', val_others_dir='val/val/val/others')
-    subset_size = 50
+    subset_size = 1500
     num_features_to_select = 200  # Choose the number of top features to select
     classifier.train_classifier(subset_size=subset_size, num_features_to_select=num_features_to_select)

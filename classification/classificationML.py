@@ -10,6 +10,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.decomposition import IncrementalPCA
 from sklearn.model_selection import GridSearchCV
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis 
+from sklearn.model_selection import cross_val_score
 
 
 def train_random_forest_classifier(x_train, y_train, x_val, y_val):
@@ -44,7 +46,7 @@ def train_random_forest_classifier(x_train, y_train, x_val, y_val):
     # Calculate accuracy and confusion matrix
     rf_accuracy = accuracy_score(y_val, rf_preds)
     rf_confusion_matrix = confusion_matrix(y_val, rf_preds)
-    
+
     return rf_accuracy, rf_confusion_matrix
 
 def feature_selection_with_random_forest(x_train, y_train, num_features_to_select):
@@ -61,19 +63,20 @@ def feature_selection_with_random_forest(x_train, y_train, num_features_to_selec
     # Select the top 'num_features_to_select' features
     selected_feature_indices = sorted_feature_indices[:num_features_to_select]
 
-    # Extract the selected features
-    selected_features = x_train[:, selected_feature_indices]
+    return selected_feature_indices  # Return the indices of selected features
 
-    return selected_features
-
-def train_svm_classifier_with_feature_selection(x_train, y_train, x_val, y_val, num_features_to_select):
+def train_svm_classifier_with_feature_selection(x_train, y_train, x_val, y_val, num_features_to_select, num_folds=5):
     # Select the top 'num_features_to_select' features
-    selected_features = feature_selection_with_random_forest(x_train, y_train, num_features_to_select)
+    selected_feature_indices = feature_selection_with_random_forest(x_train, y_train, num_features_to_select)
+
+    # Slice the feature matrix to get selected features
+    train_selected_features = x_train[:, selected_feature_indices]
+    val_selected_features = x_val[:, selected_feature_indices]
 
     # Standardize the data
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(x_train)
-    X_test_scaled = scaler.transform(x_val)
+    X_train_scaled = scaler.fit_transform(train_selected_features)
+    X_test_scaled = scaler.transform(val_selected_features)
 
     # Perform Incremental PCA
     n_components = 50  # Choose the desired number of components
@@ -84,14 +87,43 @@ def train_svm_classifier_with_feature_selection(x_train, y_train, x_val, y_val, 
     # Create an SVM classifier with the RBF (Medium Gaussian) kernel
     svm_classifier = SVC(kernel='rbf', C=1.0, gamma='scale')
 
-    # Train the SVM classifier
+     # Perform cross-validation
+    svm_scores = cross_val_score(svm_classifier, X_train_pca, y_train, cv=num_folds)
+
+    # Train the SVM classifier on the entire training data
     svm_classifier.fit(X_train_pca, y_train)
 
-    # Make predictions on the test set
+    # Make predictions on the validation data
     y_pred = svm_classifier.predict(X_test_pca)
 
-    # Calculate accuracy and generate a classification report
+    # Calculate accuracy and generate a classification report on validation data
     accuracy = accuracy_score(y_val, y_pred)
     report = classification_report(y_val, y_pred)
 
-    return svm_classifier, accuracy, report
+    return np.mean(svm_scores), accuracy, report
+
+def train_qda_classifier(x_train, y_train, x_val, y_val, num_features_to_select, num_folds=5):
+    # Select the top 'num_features_to_select' features
+    selected_feature_indices = feature_selection_with_random_forest(x_train, y_train, num_features_to_select)
+
+    # Slice the feature matrix to get selected features
+    train_selected_features = x_train[:, selected_feature_indices]
+    val_selected_features = x_val[:, selected_feature_indices]
+
+     # Standardize the data
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(train_selected_features)
+    X_test_scaled = scaler.transform(val_selected_features)
+
+    qda_classifier = QuadraticDiscriminantAnalysis()
+
+    # Perform cross-validation
+    qda_scores = cross_val_score(qda_classifier, X_train_scaled, y_train, cv=num_folds)
+
+    qda_classifier.fit(X_train_scaled, y_train)
+    qda_preds = qda_classifier.predict(X_test_scaled)
+
+    qda_accuracy = accuracy_score(y_val, qda_preds)
+    qda_report = classification_report(y_val, qda_preds)
+
+    return np.mean(qda_scores), qda_accuracy, qda_report
