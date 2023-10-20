@@ -24,32 +24,26 @@ def resize_images(image, new_size=(227, 227), preserve_ratio=False):
         resized_image = cv2.resize(image, new_size, interpolation=cv2.INTER_CUBIC)
 
     return resized_image
-  
-def contrast_stretching(image):
-    avg = np.mean(image)
-    std_dev = np.std(image)
-    low_in = avg - 0.4 * std_dev
-    high_in = avg + 0.4 * std_dev
 
-    stretched_image = np.clip((image - low_in) / (high_in - low_in) * 255, 0, 255).astype(np.uint8)
-
-    return stretched_image
 
 def remove_hair(image):
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
-    hsv = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2HSV)
-    lower_hair = np.array([0, 20, 70], dtype=np.uint8)
-    upper_hair = np.array([20, 255, 255], dtype=np.uint8)
-    mask_hair = cv2.inRange(hsv, lower_hair, upper_hair)
 
-    # Apply the mask
-    image_rgb = cv2.bitwise_and(image_rgb, image_rgb, mask=cv2.bitwise_not(mask_hair))
+    # Convert the resized image to grayscale
+    gray_scale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    kernel = np.ones((15, 15), np.uint8)
-    bottom_hat = cv2.morphologyEx(image_rgb, cv2.MORPH_BLACKHAT, kernel)
-    result_hair_removed = cv2.add(image_rgb, bottom_hat)
+    # Kernel for the morphological filtering
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))  # Adjust kernel size
 
-    kernel = np.ones((15, 15), np.uint8)
-    result_hair_removed = cv2.morphologyEx(result_hair_removed, cv2.MORPH_OPEN, kernel, iterations=2)
+    # Perform the bottom hat filtering on the grayscale image
+    bottom_hat = cv2.morphologyEx(gray_scale, cv2.MORPH_BLACKHAT, kernel)
+
+    # Intensify the hair contours in preparation for the inpainting algorithm
+    _, thresh2 = cv2.threshold(bottom_hat, 10, 255, cv2.THRESH_BINARY)
+
+    # Inpaint the resized image depending on the mask
+    inpainted_resized = cv2.inpaint(image, thresh2, 1, cv2.INPAINT_TELEA)
+
+    # Resize the inpainted image back to the original size
+    result_hair_removed = cv2.resize(inpainted_resized, (image.shape[1], image.shape[0]))
 
     return result_hair_removed

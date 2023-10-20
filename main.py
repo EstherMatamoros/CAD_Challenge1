@@ -16,7 +16,20 @@ class SkinImageClassifier:
         self.val_nevus_dir = val_nevus_dir
         self.val_others_dir = val_others_dir
 
+    def load_preprocessed_image(self):
+        if os.path.exists('preprocessed_image.pickle'):
+            with open('preprocessed_image.pickle', 'rb') as file:
+                preprocessed_image = pickle.load(file)
+            return preprocessed_image
+        else:
+            return None
+
+
     def preprocess_image(self, image):
+
+        if self.preprocessed_image is not None:
+            return self.preprocessed_image
+    
         # Convert grayscale image to 3-channel color image if needed
         if len(image.shape) == 2 or image.shape[2] == 1:
             image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
@@ -24,15 +37,13 @@ class SkinImageClassifier:
             image_rgb = image
 
         resized_image = resize_images(image_rgb)
-
-        # Convert image to grayscale
-        grayscale_image = cv2.cvtColor(resized_image, cv2.COLOR_BGR2GRAY)
-
-        # Apply contrast stretching to the grayscale image
-        stretched_image = contrast_stretching(grayscale_image)
         
         # Remove hair from the stretched grayscale image
-        hair_removed_image = remove_hair(stretched_image)
+        hair_removed_image = remove_hair(resized_image)
+
+        # Save the preprocessed image to a pickle file
+        with open('preprocessed_image.pickle', 'wb') as file:
+            pickle.dump(hair_removed_image, file)
 
         return hair_removed_image
 
@@ -89,7 +100,6 @@ class SkinImageClassifier:
         val_features = val_nevus_features + val_others_features
         val_labels = val_nevus_labels + val_others_labels
 
-
         # After combining features and labels, reshape the features array
         train_features = np.array(train_features)  # Convert to NumPy array
         train_features = train_features.reshape(train_features.shape[0], -1)  # Reshape to 2D
@@ -132,6 +142,6 @@ class SkinImageClassifier:
 
 if __name__ == "__main__":
     classifier = SkinImageClassifier(nevus_dir='train/train/nevus', others_dir='train/train/others',val_nevus_dir='val/val/val/nevus', val_others_dir='val/val/val/others')
-    subset_size = 1500
+    subset_size = None
     num_features_to_select = 200  # Choose the number of top features to select
     classifier.train_classifier(subset_size=subset_size, num_features_to_select=num_features_to_select)
